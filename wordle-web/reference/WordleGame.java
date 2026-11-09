@@ -1,8 +1,9 @@
+import java.io.*;
 import java.util.*;
 
 public class WordleGame {
-    // Built-in 5-letter dictionary collection
-    private static final Set<String> DICTIONARY = new HashSet<>(Arrays.asList(
+    // Built-in 5-letter fallback dictionary collection
+    private static final Set<String> DEFAULT_DICTIONARY = new HashSet<>(Arrays.asList(
         "apple", "beach", "chair", "dance", "eagle", "faith", "grape", "happy", "image", "juice",
         "knife", "lemon", "mouse", "night", "ocean", "peace", "queen", "river", "smile", "train",
         "urban", "voice", "water", "youth", "zebra", "blend", "crane", "drift", "ember",
@@ -69,6 +70,10 @@ public class WordleGame {
         "yeast", "young", "yours", "youth", "zones"
     ));
 
+    // Active word list used to validate guesses and pick secret words (loaded from CSV or fallback)
+    private static Set<String> dictionary = new HashSet<>(DEFAULT_DICTIONARY);
+    private static String csvSourceInfo = "Built-in dictionary";
+
     // ANSI Escape Codes for console colors
     public static final String RESET = "\u001B[0m";
     public static final String GREEN_BG = "\u001B[42m";
@@ -92,9 +97,74 @@ public class WordleGame {
         "green", 4
     );
 
+    /**
+     * Attempts to find a default words.csv file in common project directories.
+     */
+    public static String findDefaultCsvFile() {
+        String[] candidatePaths = {
+            "words.csv",
+            "reference/words.csv",
+            "../words.csv",
+            "src/main/resources/words.csv",
+            "../reference/words.csv"
+        };
+        for (String path : candidatePaths) {
+            File file = new File(path);
+            if (file.exists() && file.isFile()) {
+                return path;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Reads and parses 5-letter words from a CSV file.
+     * Supports comma-separated columns or rows, quotes, and ignores header rows.
+     */
+    public static Set<String> loadWordsFromCsv(String filePath) {
+        File file = new File(filePath);
+        if (!file.exists() || !file.isFile()) {
+            return null;
+        }
+
+        Set<String> words = new HashSet<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] tokens = line.split(",");
+                for (String token : tokens) {
+                    String clean = token.replaceAll("[^a-zA-Z]", "").trim().toLowerCase();
+                    if (clean.length() == 5 && !clean.equalsIgnoreCase("words")) {
+                        words.add(clean);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("⚠️ Error reading CSV file: " + e.getMessage());
+            return null;
+        }
+
+        return words.isEmpty() ? null : words;
+    }
+
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-        List<String> wordListAsList = new ArrayList<>(DICTIONARY);
+
+        // Load words from CSV file if provided via args or found in default locations
+        String csvPath = (args.length > 0) ? args[0] : findDefaultCsvFile();
+        if (csvPath != null) {
+            Set<String> loaded = loadWordsFromCsv(csvPath);
+            if (loaded != null && !loaded.isEmpty()) {
+                dictionary = loaded;
+                csvSourceInfo = "CSV file (" + csvPath + ") with " + dictionary.size() + " words";
+            } else {
+                csvSourceInfo = "Built-in fallback (" + dictionary.size() + " words) [CSV file at " + csvPath + " was empty or invalid]";
+            }
+        } else {
+            csvSourceInfo = "Built-in fallback (" + dictionary.size() + " words) [Tip: add words.csv or pass as argument]";
+        }
+
+        List<String> wordListAsList = new ArrayList<>(dictionary);
         Random random = new Random();
 
         boolean playAgain = true;
@@ -110,6 +180,7 @@ public class WordleGame {
             System.out.println("\n==================================");
             System.out.println("       WELCOME TO JAVA WORDLE      ");
             System.out.println("==================================");
+            System.out.println("Word Dictionary: " + csvSourceInfo);
             System.out.println("Commands during your turn: Type a 5-letter word, type 'HINT', or 'RESET'.");
 
             while (guesses.size() < 6 && !won) {
@@ -133,7 +204,7 @@ public class WordleGame {
                     continue;
                 }
 
-                if (!DICTIONARY.contains(input)) {
+                if (!dictionary.contains(input)) {
                     System.out.println("❌ Error: Not in official word list.");
                     continue;
                 }
@@ -215,7 +286,7 @@ public class WordleGame {
             return;
         }
 
-        // Find an unrevealed correct letter
+        // Find an unrevealed and unhinted letter
         Character targetLetter = null;
         for (int i = 0; i < 5; i++) {
             char letter = secretWord.charAt(i);
@@ -226,14 +297,16 @@ public class WordleGame {
                     break;
                 }
             }
-            if (!alreadySolved) {
+            String currentKbd = keyboardStatus.get(letter);
+            boolean alreadyHinted = "blue".equals(currentKbd) || "green".equals(currentKbd);
+            if (!alreadySolved && !alreadyHinted) {
                 targetLetter = letter;
                 break;
             }
         }
 
         if (targetLetter == null) {
-            System.out.println("✨ All letters have already been revealed!");
+            System.out.println("✨ All letters in the secret word have already been revealed or hinted!");
             return;
         }
 
@@ -276,9 +349,9 @@ public class WordleGame {
     private static String formatColoredChar(char c, String status) {
         String uppercase = String.valueOf(c).toUpperCase();
         switch (status) {
-            - case "green": return GREEN_BG + BLACK_TEXT + " " + uppercase + " " + RESET;
-            - case "orange": return ORANGE_BG + BLACK_TEXT + " " + uppercase + " " + RESET;
-            - case "blue": return BLUE_BG + WHITE_TEXT + " " + uppercase + " " + RESET;
+            case "green": return GREEN_BG + BLACK_TEXT + " " + uppercase + " " + RESET;
+            case "orange": return ORANGE_BG + BLACK_TEXT + " " + uppercase + " " + RESET;
+            case "blue": return BLUE_BG + WHITE_TEXT + " " + uppercase + " " + RESET;
             default: return GREY_BG + WHITE_TEXT + " " + uppercase + " " + RESET;
         }
     }

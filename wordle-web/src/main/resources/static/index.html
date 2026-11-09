@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#10131b">
+    <title>Wordle Web</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark">W</div>
+                <div>
+                    <div class="brand-name">WORDLE<span>WEB</span></div>
+                    <div class="brand-subtitle">A Java-powered word game</div>
+                </div>
+            </div>
+            <button id="new-game-top" class="icon-button" title="Start a new game" aria-label="Start a new game">↻</button>
+        </header>
+
+        <section class="intro">
+            <p class="eyebrow">THE DAILY-STYLE WORD CHALLENGE</p>
+            <h1>Guess the <span>word.</span></h1>
+            <p class="subtitle">Find the hidden five-letter word in six tries.</p>
+        </section>
+
+        <section class="game-panel" aria-label="Word game">
+            <div class="game-meta">
+                <div><span class="meta-label">ATTEMPTS LEFT</span><strong id="attempts">6</strong></div>
+                <div><span class="meta-label">HINTS LEFT</span><strong id="hints-count">5</strong></div>
+            </div>
+
+            <div id="board" class="board" aria-label="Guess board"></div>
+
+            <div id="message" class="message" role="status" aria-live="polite">Starting a new game…</div>
+
+            <div class="action-row">
+                <button id="hint-button" class="secondary-button">✦ Use hint <span id="hint-cost">5 left</span></button>
+                <button id="new-game-button" class="primary-button">New game</button>
+            </div>
+
+            <div class="keyboard" id="keyboard" aria-label="On-screen keyboard"></div>
+        </section>
+
+        <section class="how-to">
+            <h2>How to play</h2>
+            <div class="legend">
+                <div class="legend-item"><span class="legend-tile green">A</span><span><b>Green</b><small>Right letter, right spot</small></span></div>
+                <div class="legend-item"><span class="legend-tile orange">B</span><span><b>Orange</b><small>Right letter, wrong spot</small></span></div>
+                <div class="legend-item"><span class="legend-tile grey">C</span><span><b>Gray</b><small>Letter is not in the word</small></span></div>
+                <div class="legend-item"><span class="legend-tile blue">D</span><span><b>Blue</b><small>Hint: letter is in the word</small></span></div>
+            </div>
+        </section>
+
+        <footer>Built with Java · Spring Boot · HTML · CSS · JavaScript</footer>
+    </main>
+    <script src="/app.js"></script>
+</body>
+</html>
