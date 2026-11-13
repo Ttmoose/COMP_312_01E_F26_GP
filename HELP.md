@@ -1,235 +1,188 @@
-# Wordle Web Application — Setup & Run Guide
+# Wordle Application — Setup & Run Guide
 
-A browser-based Wordle game built with a **Java 17 / Spring Boot** backend and a responsive **HTML5, CSS3, and JavaScript** frontend.
-
----
-
-## 📋 System Requirements & Prerequisites
-
-Before running the application, make sure you have:
-
-1. **Java JDK 17 or higher** (Java 17, 21, etc.)
-   - Check your installed version in the terminal:
-     ```bash
-     java -version
-     ```
-   - If not installed, download from [Adoptium / Eclipse Temurin](https://adoptium.net/) or [Oracle Java](https://www.oracle.com/java/technologies/downloads/).
-2. **Maven**: *Optional*. A self-contained Maven Wrapper (`mvnw` / `mvnw.cmd`) is included in the `wordle-web` directory, so you do not need Maven pre-installed.
-3. **Web Browser**: Any modern browser (Chrome, Firefox, Safari, Edge).
+A full-stack Wordle game featuring both a **Python 3 implementation** (standard library, zero external dependencies) and a **Java 17 / Spring Boot implementation**, paired with a responsive **HTML5, CSS3, and JavaScript** web frontend and an interactive **Terminal / CLI mode**.
 
 ---
 
-## 🚀 How to Run the Application
+## 🐍 Part 1: Running with Python (Recommended / Quickest)
 
-You can launch the application using any of the methods below. Choose the one that best fits your environment:
+The Python version runs on standard Python 3 with **zero third-party dependencies** required (no `pip install` needed).
 
-### Method 1: Helper Script (Recommended for macOS & Linux)
+### System Requirements
+- **Python 3.8+** (check with `python3 --version`)
+- Modern web browser (Chrome, Safari, Firefox, Edge)
 
-The repository provides a startup script (`run.sh`) that automatically locates your Java installation, sets `JAVA_HOME`, and boots the server:
+---
+
+### Option A: Python Web Application (Browser Game)
+
+1. Open your terminal and navigate to the `wordle-python` directory:
+   ```bash
+   cd wordle-python
+   ```
+2. Start the Python web server:
+   ```bash
+   # Using the runner script:
+   ./run.sh
+
+   # Or running directly with python3:
+   python3 server.py
+   ```
+   *(To use an alternate port: `python3 server.py --port 8081`)*
+
+3. Open your browser and navigate to:
+   **<http://localhost:8080>**
+
+4. Press `Ctrl + C` in the terminal anytime to stop the server.
+
+---
+
+### Option B: Python Terminal / CLI Game (Console Game)
+
+You can also play the classic Wordle game directly in your terminal with colored ANSI graphics:
 
 ```bash
-# 1. From the repository root, change to the wordle-web directory:
-cd wordle-web
-
-# 2. Run the startup script:
-./run.sh
+cd wordle-python
+python3 wordle_cli.py
 ```
-
-*(Alternatively, run directly from the repository root: `./wordle-web/run.sh`)*
-
-> **Note**: If you get a `Permission denied` error, grant execution permissions:
-> ```bash
-> chmod +x wordle-web/run.sh wordle-web/mvnw
-> ```
+- Type any 5-letter word and press **Enter** to submit your guess.
+- Type `HINT` during your turn to reveal an unrevealed letter (up to 5 hints).
+- Type `RESET` to restart the current game round.
 
 ---
 
-### Method 2: Maven Wrapper (macOS & Linux)
+### Option C: Running Python Automated Tests
 
-If you prefer using the Maven Wrapper directly in your terminal:
+The Python test suite mirrors the full Java test specification (15 unit and integration tests):
 
+```bash
+cd wordle-python
+python3 test_wordle.py
+```
+
+---
+
+## ☕ Part 2: Running with Java (Spring Boot)
+
+### System Requirements
+- **Java JDK 17 or higher** (`java -version`)
+- Maven Wrapper is included (`mvnw` / `mvnw.cmd`), so Maven does not need to be pre-installed.
+
+---
+
+### How to Run the Java Backend
+
+#### Method 1: Helper Script (macOS & Linux)
+```bash
+cd wordle-web
+./run.sh
+```
+*(Automatically detects your JDK installation, exports `JAVA_HOME`, and launches Spring Boot).*
+
+> If you get `Permission denied`, run: `chmod +x wordle-web/run.sh wordle-web/mvnw`
+
+#### Method 2: Maven Wrapper (macOS & Linux)
 ```bash
 cd wordle-web
 ./mvnw spring-boot:run
 ```
 
----
-
-### Method 3: Maven Wrapper (Windows Command Prompt or PowerShell)
-
-On Windows systems:
-
+#### Method 3: Maven Wrapper (Windows)
 ```cmd
 cd wordle-web
 mvnw.cmd spring-boot:run
 ```
+*(In PowerShell: `.\mvnw.cmd spring-boot:run`)*
 
-Or in PowerShell:
-```powershell
-cd wordle-web
-.\mvnw.cmd spring-boot:run
-```
-
----
-
-### Method 4: Using Locally Installed Maven (`mvn`)
-
-If you have Apache Maven installed and configured in your `PATH`:
-
+#### Method 4: Build and Run Standalone JAR
 ```bash
 cd wordle-web
-mvn spring-boot:run
-```
-
----
-
-### Method 5: Build and Run as a Standalone Executable JAR
-
-To package the application into a standalone JAR file:
-
-```bash
-cd wordle-web
-
-# Build and package
 ./mvnw clean package
-
-# Run the packaged JAR
 java -jar target/wordle-web-0.0.1-SNAPSHOT.jar
 ```
-*(On Windows, replace `./mvnw` with `mvnw.cmd`)*
 
----
-
-### Method 6: Running inside an IDE (IntelliJ IDEA, Eclipse, VS Code)
-
-1. Open your IDE and import/open the `wordle-web` directory (or the repository root) as an existing **Maven** project.
-2. Ensure your Project SDK is set to **Java 17 or higher**.
-3. Navigate to:  
-   `src/main/java/com/wordle/WordleWebApplication.java`
-4. Run the `main` method (click the green "Play" icon or right-click `WordleWebApplication` -> **Run**).
-
----
-
-## 🌐 Playing the Game
-
-1. Once the application starts, open your web browser and navigate to:
-   ```
-   http://localhost:8080
-   ```
-2. **How to Play**:
-   - **Goal**: Guess the hidden 5-letter word within **6 attempts**.
-   - **Input**: Use either your physical keyboard or click the interactive on-screen keyboard.
-   - **Color Feedback**:
-     - 🟩 **Green**: Correct letter in the correct position.
-     - 🟧 **Orange**: Correct letter, but in the wrong position.
-     - ⬛ **Gray**: Letter does not exist in the target word.
-     - 🟦 **Blue**: Revealed hint letter.
-   - **Hints**: Click the **Hint** button (up to **5 hints per game**) to reveal a random remaining letter from the secret word.
-   - **New Game**: Click the **Play Again** or **New Game** button at any time to start a fresh round.
-3. **Stopping the Server**:
-   - Press `Ctrl + C` in the terminal where the server is running.
-
----
-
-## 🧪 Running Automated Tests
-
-The project includes unit and integration tests covering game logic, hint generation, dictionary validation, and API endpoints.
-
-To run the test suite:
-
+#### Running Java Automated Tests
 ```bash
 cd wordle-web
 ./mvnw test
 ```
-*(On Windows: `mvnw.cmd test`)*
+
+---
+
+## 🎮 How to Play
+
+1. Open your browser to **<http://localhost:8080>** (after starting either the Python or Java server).
+2. **Rules & Objective**:
+   - Guess the hidden 5-letter secret word in **6 attempts**.
+   - Input words using your physical keyboard or the clickable on-screen keyboard.
+3. **Color Codes**:
+   - 🟩 **Green**: Correct letter in the correct position.
+   - 🟧 **Orange / Yellow**: Correct letter, but in the wrong position.
+   - ⬛ **Gray**: Letter does not exist in the secret word.
+   - 🟦 **Blue**: Revealed hint letter on the keyboard.
+4. **Hints**: Click **Hint** (up to 5 per round) to reveal an unrevealed letter in blue.
+5. **New Game**: Click **Play Again** at any time to begin a fresh round.
 
 ---
 
 ## 🛠️ Troubleshooting & FAQs
 
-### 1. `The JAVA_HOME environment variable is not defined correctly`
-- Ensure Java 17+ is installed.
-- **macOS**:
+### 1. `Port 8080 was already in use`
+- **For Python**: Specify an alternate port when running:
   ```bash
-  export JAVA_HOME=$(/usr/libexec/java_home -v 17)
-  # or if using Java 21:
-  export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+  python3 server.py --port 8081
   ```
-- **Linux (Ubuntu/Debian)**:
+  Then visit `http://localhost:8081`.
+- **For Java**: Pass the server port parameter:
   ```bash
-  export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-  export PATH=$JAVA_HOME/bin:$PATH
-  ```
-- **Windows**:
-  - Open **System Properties** > **Environment Variables**.
-  - Add or update `JAVA_HOME` pointing to your JDK folder (e.g., `C:\Program Files\Eclipse Adoptium\jdk-17...`).
-  - Add `%JAVA_HOME%\bin` to your `Path` variable.
-- *Tip*: On macOS/Linux, running `./wordle-web/run.sh` attempts to auto-detect your JDK path automatically!
-
-### 2. `Web server failed to start. Port 8080 was already in use`
-Another application is already using port 8080. You can either:
-- **Free port 8080**:
-  - macOS/Linux:
-    ```bash
-    lsof -i :8080
-    kill -9 <PID>
-    ```
-  - Windows:
-    ```cmd
-    netstat -ano | findstr :8080
-    taskkill /PID <PID> /F
-    ```
-- **Or run on a different port** (e.g., port 8081):
-  ```bash
-  cd wordle-web
   ./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=8081
   ```
-  Then access the application at `http://localhost:8081`.
+- **Or free port 8080**:
+  - macOS/Linux: `lsof -i :8080` then `kill -9 <PID>`
+  - Windows: `netstat -ano | findstr :8080` then `taskkill /PID <PID> /F`
 
-### 3. `Permission denied` when running scripts
-Make the scripts executable with:
+### 2. Java: `The JAVA_HOME environment variable is not defined correctly`
+- Use the **Python version** (`cd wordle-python && python3 server.py`), which has no JDK dependency!
+- Or set `JAVA_HOME` on macOS:
+  ```bash
+  export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+  ```
+
+### 3. `Permission denied` on shell scripts
 ```bash
-chmod +x wordle-web/run.sh wordle-web/mvnw
+chmod +x wordle-python/run.sh wordle-python/wordle_cli.py wordle-web/run.sh wordle-web/mvnw
 ```
 
 ---
 
-## 📁 Project Directory Structure
+## 📁 Repository Structure
 
 ```text
 COMP_312_01E_F26_GP/
-├── HELP.md                    # Root setup and run guide
-└── wordle-web/
-    ├── HELP.md                # Project setup and run guide
-    ├── README.md              # Project overview and features
-    ├── pom.xml                # Maven configuration and dependencies
-    ├── run.sh                 # Helper startup script (macOS/Linux)
+├── HELP.md                    # Root setup and run guide (this document)
+├── wordle-python/             # Python Implementation (Standard Library)
+│   ├── server.py              # Zero-dependency Python web server
+│   ├── wordle_logic.py        # Core game rules, dictionary & session state
+│   ├── wordle_cli.py          # Terminal game with ANSI colors
+│   ├── test_wordle.py         # 15 automated test cases
+│   ├── run.sh                 # Quick startup script
+│   ├── app_flask.py           # Optional Flask alternative
+│   ├── requirements.txt       # Optional dependencies
+│   ├── words.csv              # 607 five-letter word dictionary
+│   ├── README.md              # Python guide
+│   └── static/                # Web frontend assets (HTML, CSS, JS)
+│       ├── index.html
+│       ├── style.css
+│       └── app.js
+└── wordle-web/                # Java 17 / Spring Boot Implementation
+    ├── HELP.md                # Java setup guide
+    ├── README.md              # Java project overview
+    ├── pom.xml                # Maven configuration
+    ├── run.sh                 # Java startup script
     ├── mvnw / mvnw.cmd        # Maven wrapper scripts
-    ├── words.csv              # 5-letter word dictionary
-    ├── src/
-    │   ├── main/
-    │   │   ├── java/com/wordle/
-    │   │   │   ├── WordleWebApplication.java  # Main Spring Boot entry point
-    │   │   │   ├── controller/               # REST API endpoints
-    │   │   │   ├── service/                  # Game state & business logic
-    │   │   │   └── model/                    # Data transfer models
-    │   │   └── resources/
-    │   │       ├── application.properties    # Server settings
-    │   │       ├── words.csv                 # Classpath word list
-    │   │       └── static/                   # Frontend assets
-    │   │           ├── index.html            # Web UI markup
-    │   │           ├── style.css             # UI styling & animations
-    │   │           └── app.js                # Game client logic
-    │   └── test/                             # Automated test suite
-    └── reference/
-        └── WordleGame.java                   # Original reference console game
+    ├── words.csv              # 607 five-letter word dictionary
+    └── src/
+        ├── main/java/...      # Spring Boot controller, service, models
+        ├── main/resources/... # Application properties & static assets
+        └── test/java/...      # JUnit 5 & Mockito test suite
 ```
-
----
-
-## 📚 Reference Documentation
-
-For additional technical details on the underlying frameworks:
-* [Official Apache Maven documentation](https://maven.apache.org/guides/index.html)
-* [Spring Boot Maven Plugin Reference Guide](https://docs.spring.io/spring-boot/3.3.4/maven-plugin)
-* [Spring Boot Reference Documentation](https://docs.spring.io/spring-boot/3.3.4/reference/index.html)

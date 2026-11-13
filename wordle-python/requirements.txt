@@ -1,0 +1,8 @@
+# Python Wordle Web Application
+#
+# NOTE: The default implementation (server.py) runs on Python 3 standard library
+# and requires ZERO external dependencies!
+#
+# Optional dependencies (only if you want to use pytest or flask):
+# flask>=3.0.0
+# pytest>=8.0.0
