@@ -1,7 +1,7 @@
 """
-Core Wordle game logic and session management in Python.
-Matches all rules, two-pass guess evaluation, hint handling, and keyboard priorities
-from the Java Wordle application.
+wordle_logic.py
+Connects the ShhRey-inspired Wordle and LetterState engine to the web server
+and multi-session REST API.
 """
 
 from __future__ import annotations
@@ -13,6 +13,9 @@ import threading
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Set
+
+from letter_state import LetterState
+from wordle import COLOR_PRIORITY, Wordle
 
 FALLBACK_DICTIONARY: Set[str] = {
     "apple", "beach", "chair", "dance", "eagle", "faith", "grape", "happy", "image", "juice",
@@ -78,19 +81,9 @@ FALLBACK_DICTIONARY: Set[str] = {
     "yards", "years", "yeast", "young", "yours", "youth", "zones",
 }
 
-COLOR_PRIORITY: Dict[str, int] = {
-    "grey": 1,
-    "orange": 2,
-    "blue": 3,
-    "green": 4,
-}
-
 
 def load_words_from_csv(file_path: Optional[str] = None) -> Set[str]:
-    """
-    Loads 5-letter words from a CSV file. If no file path is specified,
-    checks standard project locations before falling back to built-in dictionary.
-    """
+    """Loads 5-letter words from words.csv or fallback locations."""
     candidate_paths: List[str] = []
     if file_path:
         candidate_paths.append(file_path)
@@ -101,7 +94,6 @@ def load_words_from_csv(file_path: Optional[str] = None) -> Set[str]:
         os.path.join(base_dir, "..", "wordle-web", "words.csv"),
         os.path.join(base_dir, "..", "words.csv"),
         "words.csv",
-        "wordle-web/words.csv",
         "wordle-python/words.csv",
     ])
 
@@ -125,39 +117,41 @@ def load_words_from_csv(file_path: Optional[str] = None) -> Set[str]:
 
 
 class GameSession:
-    """Represents an active Wordle game session for a single player/tab."""
+    """Wraps a Wordle game instance with thread-safety and timestamping for web sessions."""
 
     def __init__(self, game_id: str, secret_word: str):
         self.game_id: str = game_id
-        self.secret_word: str = secret_word.lower()
-        self.guesses: List[Dict[str, Any]] = []
-        self.keyboard_status: Dict[str, str] = {}
-        self.hints_left: int = 5
-        self.won: bool = False
-        self.game_over: bool = False
+        self.wordle: Wordle = Wordle(secret_word)
         self.message: str = "Start guessing! You have 6 attempts and 5 hints."
         self.last_accessed: float = time.time()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def touch(self) -> None:
         self.last_accessed = time.time()
 
     def to_dict(self) -> Dict[str, Any]:
         with self._lock:
+            formatted_guesses = [
+                {
+                    "guess": word.lower(),
+                    "statuses": [state.status for state in states]
+                }
+                for word, states in zip(self.wordle.attempts, self.wordle.results)
+            ]
             return {
                 "gameId": self.game_id,
-                "guesses": [dict(g) for g in self.guesses],
-                "keyboardStatus": dict(self.keyboard_status),
-                "attemptsRemaining": max(0, 6 - len(self.guesses)),
-                "hintsLeft": self.hints_left,
-                "won": self.won,
-                "gameOver": self.game_over,
+                "guesses": formatted_guesses,
+                "keyboardStatus": dict(self.wordle.keyboard_status),
+                "attemptsRemaining": self.wordle.remaining_attempts,
+                "hintsLeft": self.wordle.hints_left,
+                "won": self.wordle.is_solved,
+                "gameOver": self.wordle.is_game_over,
                 "message": self.message,
             }
 
 
 class GameService:
-    """Manages game sessions, guess evaluation, hints, and word dictionary."""
+    """Multi-session service managing player sessions on top of the Wordle engine."""
 
     def __init__(self, words_file: Optional[str] = None):
         self.dictionary: Set[str] = load_words_from_csv(words_file)
@@ -191,7 +185,7 @@ class GameService:
         return session.to_dict()
 
     def create_game_with_secret(self, secret: str) -> Dict[str, Any]:
-        """Helper primarily for testing and deterministic setups."""
+        """Testing helper to start a deterministic game."""
         self._evict_old_sessions_if_needed()
         game_id = str(uuid.uuid4())
         session = GameSession(game_id, secret.lower())
@@ -200,18 +194,13 @@ class GameService:
         return session.to_dict()
 
     def get_game(self, game_id: str) -> Dict[str, Any]:
-        session = self._find_game(game_id)
-        return session.to_dict()
+        return self._find_game(game_id).to_dict()
 
     def reset_game(self, game_id: str) -> Dict[str, Any]:
         session = self._find_game(game_id)
         with session._lock:
-            session.secret_word = random.choice(self.word_list)
-            session.guesses.clear()
-            session.keyboard_status.clear()
-            session.hints_left = 5
-            session.won = False
-            session.game_over = False
+            new_secret = random.choice(self.word_list)
+            session.wordle = Wordle(new_secret)
             session.message = "Game reset. Guess the new five-letter word."
             session.touch()
         return session.to_dict()
@@ -220,60 +209,26 @@ class GameService:
         session = self._find_game(game_id)
         with session._lock:
             session.touch()
-            if session.game_over:
+            if session.wordle.is_game_over:
                 session.message = "This game is finished. Start a new game to play again."
-                return {
-                    "gameId": session.game_id,
-                    "guesses": [dict(g) for g in session.guesses],
-                    "keyboardStatus": dict(session.keyboard_status),
-                    "attemptsRemaining": max(0, 6 - len(session.guesses)),
-                    "hintsLeft": session.hints_left,
-                    "won": session.won,
-                    "gameOver": session.game_over,
-                    "message": session.message,
-                }
+                return session.to_dict()
 
             guess = (raw_guess or "").strip().lower()
 
-            if len(guess) != 5 or not guess.isalpha():
+            if len(guess) != Wordle.WORD_LENGTH or not guess.isalpha():
                 session.message = "Your guess must be exactly five letters."
-                return {
-                    "gameId": session.game_id,
-                    "guesses": [dict(g) for g in session.guesses],
-                    "keyboardStatus": dict(session.keyboard_status),
-                    "attemptsRemaining": max(0, 6 - len(session.guesses)),
-                    "hintsLeft": session.hints_left,
-                    "won": session.won,
-                    "gameOver": session.game_over,
-                    "message": session.message,
-                }
+                return session.to_dict()
 
             if guess not in self.dictionary:
                 session.message = "That word is not in the game's dictionary."
-                return {
-                    "gameId": session.game_id,
-                    "guesses": [dict(g) for g in session.guesses],
-                    "keyboardStatus": dict(session.keyboard_status),
-                    "attemptsRemaining": max(0, 6 - len(session.guesses)),
-                    "hintsLeft": session.hints_left,
-                    "won": session.won,
-                    "gameOver": session.game_over,
-                    "message": session.message,
-                }
+                return session.to_dict()
 
-            statuses = self.evaluate_guess(guess, session.secret_word)
-            session.guesses.append({"guess": guess, "statuses": statuses})
+            session.wordle.attempt(guess)
 
-            for i in range(5):
-                self._update_keyboard_status(session, guess[i], statuses[i])
-
-            if guess == session.secret_word:
-                session.won = True
-                session.game_over = True
+            if session.wordle.is_solved:
                 session.message = "Genius! You guessed the word!"
-            elif len(session.guesses) >= 6:
-                session.game_over = True
-                session.message = f"Game over! The word was {session.secret_word.upper()}."
+            elif session.wordle.remaining_attempts <= 0:
+                session.message = f"Game over! The word was {session.wordle.secret.upper()}."
             else:
                 session.message = "Good guess. Keep going!"
 
@@ -283,108 +238,29 @@ class GameService:
         session = self._find_game(game_id)
         with session._lock:
             session.touch()
-            if session.game_over:
+            if session.wordle.is_game_over:
                 session.message = "This game is finished. Start a new game to play again."
-                return {
-                    "gameId": session.game_id,
-                    "guesses": [dict(g) for g in session.guesses],
-                    "keyboardStatus": dict(session.keyboard_status),
-                    "attemptsRemaining": max(0, 6 - len(session.guesses)),
-                    "hintsLeft": session.hints_left,
-                    "won": session.won,
-                    "gameOver": session.game_over,
-                    "message": session.message,
-                }
+                return session.to_dict()
 
-            if session.hints_left <= 0:
+            if session.wordle.hints_left <= 0:
                 session.message = "You have no hints remaining."
-                return {
-                    "gameId": session.game_id,
-                    "guesses": [dict(g) for g in session.guesses],
-                    "keyboardStatus": dict(session.keyboard_status),
-                    "attemptsRemaining": max(0, 6 - len(session.guesses)),
-                    "hintsLeft": session.hints_left,
-                    "won": session.won,
-                    "gameOver": session.game_over,
-                    "message": session.message,
-                }
+                return session.to_dict()
 
-            target_letter: Optional[str] = None
-            for i in range(5):
-                letter = session.secret_word[i]
-                already_solved = False
-                for g in session.guesses:
-                    if g["guess"][i] == letter and g["statuses"][i] == "green":
-                        already_solved = True
-                        break
-
-                kbd = session.keyboard_status.get(letter)
-                already_hinted = (kbd in ("blue", "green"))
-                if not already_solved and not already_hinted:
-                    target_letter = letter
-                    break
-
-            if target_letter is None:
+            hint_result = session.wordle.use_hint()
+            if hint_result is None:
                 session.message = "All letters in the secret word have already been revealed or hinted!"
-                return {
-                    "gameId": session.game_id,
-                    "guesses": [dict(g) for g in session.guesses],
-                    "keyboardStatus": dict(session.keyboard_status),
-                    "attemptsRemaining": max(0, 6 - len(session.guesses)),
-                    "hintsLeft": session.hints_left,
-                    "won": session.won,
-                    "gameOver": session.game_over,
-                    "message": session.message,
-                }
+                return session.to_dict()
 
-            session.hints_left -= 1
-            self._update_keyboard_status(session, target_letter, "blue")
-
-            played_wrong_location = any(target_letter in g["guess"] for g in session.guesses)
+            target_letter, played_wrong = hint_result
             letter_str = target_letter.upper()
-            extra = " Consider trying it in a different position." if played_wrong_location else ""
+            extra = " Consider trying it in a different position." if played_wrong else ""
             session.message = f"Hint used: {letter_str} is highlighted blue on the keyboard.{extra}"
 
         return session.to_dict()
 
     @staticmethod
     def evaluate_guess(guess: str, target: str) -> List[str]:
-        """
-        Two-pass evaluation matching Wordle rules:
-        Pass 1: Exact letter & position matches -> green
-        Pass 2: Letter in word but different position -> orange
-        Remaining -> grey
-        """
-        statuses = ["grey"] * 5
-        target_chars: List[Optional[str]] = list(target)
-
-        # 1st Pass: Greens
-        for i in range(5):
-            if guess[i] == target_chars[i]:
-                statuses[i] = "green"
-                target_chars[i] = None
-
-        # 2nd Pass: Oranges
-        for i in range(5):
-            if statuses[i] == "green":
-                continue
-            char = guess[i]
-            for j in range(5):
-                if target_chars[j] == char:
-                    statuses[i] = "orange"
-                    target_chars[j] = None
-                    break
-
-        return statuses
-
-    @staticmethod
-    def _update_keyboard_status(session: GameSession, letter: str, new_status: str) -> None:
-        """
-        Updates keyboard status following priority:
-        grey (1) < orange (2) < blue (3) < green (4)
-        """
-        current = session.keyboard_status.get(letter)
-        new_priority = COLOR_PRIORITY.get(new_status, 0)
-        current_priority = COLOR_PRIORITY.get(current, 0) if current else 0
-        if current is None or new_priority > current_priority:
-            session.keyboard_status[letter] = new_status
+        """Static helper returning string statuses using Wordle's evaluation."""
+        dummy = Wordle(target)
+        states = dummy.guess(guess)
+        return [st.status for st in states]

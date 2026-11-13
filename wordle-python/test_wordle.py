@@ -1,6 +1,6 @@
 """
 Unit and Integration Tests for Python Wordle.
-Matches the test specifications from GameServiceTest.java and verifies HTTP handler routes.
+Tests LetterState, Wordle, GameService, and the HTTP server endpoints.
 """
 
 from __future__ import annotations
@@ -10,8 +10,70 @@ import json
 import unittest
 from unittest.mock import MagicMock
 
+from letter_state import LetterState
 from server import WordleHandler
+from wordle import Wordle
 from wordle_logic import GameService
+
+
+class TestLetterState(unittest.TestCase):
+    """Tests the LetterState class (from ShhRey / Pixegami design)."""
+
+    def test_letter_state_defaults(self) -> None:
+        state = LetterState("a")
+        self.assertEqual("A", state.character)
+        self.assertFalse(state.is_in_word)
+        self.assertFalse(state.is_in_position)
+        self.assertEqual("grey", state.status)
+
+    def test_letter_state_in_word(self) -> None:
+        state = LetterState("e")
+        state.is_in_word = True
+        self.assertEqual("orange", state.status)
+
+    def test_letter_state_in_position(self) -> None:
+        state = LetterState("c")
+        state.is_in_word = True
+        state.is_in_position = True
+        self.assertEqual("green", state.status)
+
+
+class TestWordleEngine(unittest.TestCase):
+    """Tests the Wordle engine class (from ShhRey / Pixegami design)."""
+
+    def test_wordle_initialization(self) -> None:
+        w = Wordle("apple")
+        self.assertEqual("APPLE", w.secret)
+        self.assertEqual([], w.attempts)
+        self.assertEqual([], w.results)
+        self.assertEqual(6, w.remaining_attempts)
+        self.assertTrue(w.can_attempt)
+        self.assertFalse(w.is_solved)
+        self.assertFalse(w.is_game_over)
+
+    def test_wordle_guess_and_attempt(self) -> None:
+        w = Wordle("crane")
+        states = w.attempt("beach")
+
+        self.assertEqual(1, len(w.attempts))
+        self.assertEqual("BEACH", w.attempts[0])
+        self.assertEqual(5, w.remaining_attempts)
+        self.assertEqual(["grey", "orange", "green", "orange", "grey"], [s.status for s in states])
+
+    def test_wordle_solved(self) -> None:
+        w = Wordle("apple")
+        w.attempt("apple")
+        self.assertTrue(w.is_solved)
+        self.assertTrue(w.is_game_over)
+        self.assertFalse(w.can_attempt)
+
+    def test_wordle_hints(self) -> None:
+        w = Wordle("orbit")
+        hint1 = w.use_hint()
+        self.assertIsNotNone(hint1)
+        self.assertEqual(4, w.hints_left)
+        target_char, _ = hint1
+        self.assertEqual("blue", w.keyboard_status.get(target_char))
 
 
 class TestWordleService(unittest.TestCase):
@@ -20,7 +82,6 @@ class TestWordleService(unittest.TestCase):
         self.service = GameService()
 
     def test_game_initialization(self) -> None:
-        """New game initializes with 6 attempts, 5 hints, and empty board."""
         game = self.service.new_game()
         self.assertIsNotNone(game["gameId"])
         self.assertEqual(6, game["attemptsRemaining"])
@@ -31,7 +92,6 @@ class TestWordleService(unittest.TestCase):
         self.assertFalse(game["gameOver"])
 
     def test_exact_guess_wins_game(self) -> None:
-        """Exact guess wins the game and colors all tiles green."""
         game = self.service.create_game_with_secret("apple")
         result = self.service.submit_guess(game["gameId"], "apple")
 
@@ -50,10 +110,6 @@ class TestWordleService(unittest.TestCase):
         self.assertEqual("green", result["keyboardStatus"].get("e"))
 
     def test_partial_matches_evaluation(self) -> None:
-        """
-        Partial matches evaluate green, orange, and grey correctly.
-        Target: CRANE, Guess: BEACH -> B(grey), E(orange), A(green), C(orange), H(grey)
-        """
         game = self.service.create_game_with_secret("crane")
         result = self.service.submit_guess(game["gameId"], "beach")
 
@@ -71,14 +127,6 @@ class TestWordleService(unittest.TestCase):
         self.assertEqual("grey", result["keyboardStatus"].get("h"))
 
     def test_duplicate_letter_evaluation(self) -> None:
-        """
-        Duplicate letters algorithm masks used letters correctly (CRANE vs AGREE).
-        Pass 1: E at index 4 is GREEN (matches CRANE's E at index 4)
-        Pass 2: A at index 0 is ORANGE (CRANE has A at index 2)
-                G at index 1 is GREY
-                R at index 2 is ORANGE (CRANE has R at index 1)
-                E at index 3 is GREY (CRANE only has one E, consumed by index 4)
-        """
         game = self.service.create_game_with_secret("crane")
         result = self.service.submit_guess(game["gameId"], "agree")
 
@@ -91,15 +139,12 @@ class TestWordleService(unittest.TestCase):
         self.assertEqual("green", statuses[4], "Second E should be green")
 
     def test_color_priority_on_keyboard(self) -> None:
-        """Keyboard color priority respects: grey < orange < blue < green."""
         game = self.service.create_game_with_secret("crane")
 
-        # 1. Guess "solid" (no C, R, A, N, E) -> S is grey
         self.service.submit_guess(game["gameId"], "solid")
         current_game = self.service.get_game(game["gameId"])
         self.assertEqual("grey", current_game["keyboardStatus"].get("s"))
 
-        # 2. Hint highlights an unrevealed letter blue
         after_hint = self.service.use_hint(game["gameId"])
         self.assertEqual(4, after_hint["hintsLeft"])
 
@@ -107,12 +152,10 @@ class TestWordleService(unittest.TestCase):
         self.assertTrue(len(blue_letters) >= 1)
         blue_letter = blue_letters[0]
 
-        # 3. Green overrides blue: guess the full word "crane"
         after_win = self.service.submit_guess(game["gameId"], "crane")
         self.assertEqual("green", after_win["keyboardStatus"].get(blue_letter))
 
     def test_invalid_guess_length_rejected(self) -> None:
-        """Invalid guess length is rejected without consuming an attempt."""
         game = self.service.new_game()
 
         r1 = self.service.submit_guess(game["gameId"], "cat")
@@ -124,7 +167,6 @@ class TestWordleService(unittest.TestCase):
         self.assertEqual([], r2["guesses"])
 
     def test_word_not_in_dictionary_rejected(self) -> None:
-        """Word not in dictionary is rejected without consuming an attempt."""
         game = self.service.new_game()
         result = self.service.submit_guess(game["gameId"], "zzzzz")
 
@@ -133,7 +175,6 @@ class TestWordleService(unittest.TestCase):
         self.assertIn("not in", result["message"].lower())
 
     def test_consecutive_hints_reveal_different_letters(self) -> None:
-        """Consecutive hints reveal different letters without duplicating."""
         game = self.service.create_game_with_secret("orbit")
 
         h1 = self.service.use_hint(game["gameId"])
@@ -152,7 +193,6 @@ class TestWordleService(unittest.TestCase):
         self.assertEqual(3, blue3)
 
     def test_no_hints_remaining(self) -> None:
-        """Hints cannot be used when hintsLeft reaches 0."""
         game = self.service.create_game_with_secret("orbit")
         for _ in range(5):
             self.service.use_hint(game["gameId"])
@@ -165,7 +205,6 @@ class TestWordleService(unittest.TestCase):
         self.assertIn("no hints remaining", extra["message"].lower())
 
     def test_game_over_after_six_failed_guesses(self) -> None:
-        """Game over occurs after 6 incorrect guesses."""
         game = self.service.create_game_with_secret("apple")
         guesses = ["beach", "chair", "dance", "eagle", "faith", "grape"]
         curr = game
@@ -180,7 +219,6 @@ class TestWordleService(unittest.TestCase):
         self.assertIn("APPLE", curr["message"])
 
     def test_guess_after_game_over_rejected(self) -> None:
-        """Submitting guess after game over is rejected."""
         game = self.service.create_game_with_secret("apple")
         self.service.submit_guess(game["gameId"], "apple")
 
@@ -189,7 +227,6 @@ class TestWordleService(unittest.TestCase):
         self.assertIn("finished", extra["message"].lower())
 
     def test_reset_game_preserves_session_id(self) -> None:
-        """reset_game preserves the game session ID and restores fresh state."""
         original = self.service.create_game_with_secret("apple")
         original_id = original["gameId"]
 
@@ -206,7 +243,6 @@ class TestWordleService(unittest.TestCase):
         self.assertFalse(reset["gameOver"])
 
     def test_dictionary_loaded(self) -> None:
-        """Dictionary loads 5-letter words correctly."""
         d = self.service.dictionary
         self.assertGreaterEqual(len(d), 600)
         for w in d:
@@ -230,7 +266,6 @@ class FakeSocket:
 
 
 class TestHttpServerHandler(unittest.TestCase):
-    """Verifies that WordleHandler routes match the REST API specification."""
 
     def _execute_request(self, method: str, path: str, body: dict = None) -> tuple[int, dict]:
         body_bytes = json.dumps(body).encode("utf-8") if body else b""
@@ -247,53 +282,44 @@ class TestHttpServerHandler(unittest.TestCase):
         handler = WordleHandler(sock, ("127.0.0.1", 12345), server)
         output = sock.wfile.getvalue().decode("utf-8")
 
-        # Parse HTTP status code
         lines = output.split("\r\n")
         status_line = lines[0]
         status_code = int(status_line.split(" ")[1])
 
-        # Extract body after empty line
         empty_index = output.find("\r\n\r\n")
         json_body = json.loads(output[empty_index + 4:]) if empty_index != -1 else {}
         return status_code, json_body
 
     def test_api_flow(self) -> None:
-        # 1. POST /api/games -> 200
         code, game = self._execute_request("POST", "/api/games")
         self.assertEqual(200, code)
         self.assertIn("gameId", game)
         game_id = game["gameId"]
 
-        # 2. GET /api/games/{id} -> 200
         code, fetched = self._execute_request("GET", f"/api/games/{game_id}")
         self.assertEqual(200, code)
         self.assertEqual(game_id, fetched["gameId"])
 
-        # 3. POST /api/games/{id}/guesses -> 200
         code, guessed = self._execute_request("POST", f"/api/games/{game_id}/guesses", {"guess": "beach"})
         self.assertEqual(200, code)
         self.assertEqual(1, len(guessed["guesses"]))
         self.assertEqual(5, guessed["attemptsRemaining"])
 
-        # 4. POST /api/games/{id}/hint -> 200
         code, hinted = self._execute_request("POST", f"/api/games/{game_id}/hint")
         self.assertEqual(200, code)
         self.assertEqual(4, hinted["hintsLeft"])
 
-        # 5. POST /api/games/{id}/reset -> 200
         code, reset = self._execute_request("POST", f"/api/games/{game_id}/reset")
         self.assertEqual(200, code)
         self.assertEqual(game_id, reset["gameId"])
         self.assertEqual(6, reset["attemptsRemaining"])
         self.assertEqual(5, reset["hintsLeft"])
 
-        # 6. GET unknown game -> 404
         code, error = self._execute_request("GET", "/api/games/unknown-id")
         self.assertEqual(404, code)
         self.assertIn("message", error)
 
     def test_static_files_served(self) -> None:
-        # GET / -> 200 (index.html)
         raw_http = b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"
         sock = FakeSocket(raw_http)
         WordleHandler(sock, ("127.0.0.1", 12345), MagicMock())
@@ -301,7 +327,6 @@ class TestHttpServerHandler(unittest.TestCase):
         self.assertIn("200 OK", output)
         self.assertIn("<!DOCTYPE html>", output)
 
-        # GET /style.css -> 200
         raw_http_css = b"GET /style.css HTTP/1.1\r\nHost: localhost\r\n\r\n"
         sock_css = FakeSocket(raw_http_css)
         WordleHandler(sock_css, ("127.0.0.1", 12345), MagicMock())
