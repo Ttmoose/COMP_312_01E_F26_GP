@@ -71,7 +71,7 @@ class TestWordleEngine(unittest.TestCase):
         w = Wordle("orbit")
         hint1 = w.use_hint()
         self.assertIsNotNone(hint1)
-        self.assertEqual(4, w.hints_left)
+        self.assertEqual(1, w.hints_left)
         target_char, _ = hint1
         self.assertEqual("blue", w.keyboard_status.get(target_char))
 
@@ -85,11 +85,44 @@ class TestWordleService(unittest.TestCase):
         game = self.service.new_game()
         self.assertIsNotNone(game["gameId"])
         self.assertEqual(6, game["attemptsRemaining"])
-        self.assertEqual(5, game["hintsLeft"])
+        self.assertEqual(2, game["hintsLeft"])
         self.assertEqual([], game["guesses"])
         self.assertEqual({}, game["keyboardStatus"])
         self.assertFalse(game["won"])
         self.assertFalse(game["gameOver"])
+    def test_easy_mode(self):
+        game = self.service.new_game("easy")
+        self.assertEqual("easy", game["difficulty"])
+        self.assertEqual(5, game["wordLength"])
+        self.assertEqual(8, game["attemptsRemaining"])
+        self.assertEqual(5, game["hintsLeft"])
+
+    def test_medium_mode(self):
+        game = self.service.new_game("medium")
+        self.assertEqual("medium", game["difficulty"])
+        self.assertEqual(5, game["wordLength"])
+        self.assertEqual(6, game["attemptsRemaining"])
+        self.assertEqual(2, game["hintsLeft"])
+
+    def test_hard_mode(self):
+        game = self.service.new_game("hard")
+        self.assertEqual("hard", game["difficulty"])
+        self.assertEqual(6, game["wordLength"])
+        self.assertEqual(4, game["attemptsRemaining"])
+        self.assertEqual(0, game["hintsLeft"])
+    def test_hard_mode_guess(self):
+        game = self.service.new_game("hard")
+        result = self.service.submit_guess(game["gameId"], "orange")
+        self.assertEqual(3, result["attemptsRemaining"])
+        self.assertEqual(1, len(result["guesses"]))
+
+    def test_hard_mode_reset(self):
+        game = self.service.new_game("hard")
+        reset = self.service.reset_game(game["gameId"])
+        self.assertEqual("hard", reset["difficulty"])
+        self.assertEqual(6, reset["wordLength"])
+        self.assertEqual(4, reset["attemptsRemaining"])
+        self.assertEqual(0, reset["hintsLeft"])
 
     def test_exact_guess_wins_game(self) -> None:
         game = self.service.create_game_with_secret("apple")
@@ -146,7 +179,7 @@ class TestWordleService(unittest.TestCase):
         self.assertEqual("grey", current_game["keyboardStatus"].get("s"))
 
         after_hint = self.service.use_hint(game["gameId"])
-        self.assertEqual(4, after_hint["hintsLeft"])
+        self.assertEqual(1, after_hint["hintsLeft"])
 
         blue_letters = [k for k, v in after_hint["keyboardStatus"].items() if v == "blue"]
         self.assertTrue(len(blue_letters) >= 1)
@@ -178,23 +211,23 @@ class TestWordleService(unittest.TestCase):
         game = self.service.create_game_with_secret("orbit")
 
         h1 = self.service.use_hint(game["gameId"])
-        self.assertEqual(4, h1["hintsLeft"])
+        self.assertEqual(1, h1["hintsLeft"])
         blue1 = sum(1 for v in h1["keyboardStatus"].values() if v == "blue")
         self.assertEqual(1, blue1)
 
         h2 = self.service.use_hint(game["gameId"])
-        self.assertEqual(3, h2["hintsLeft"])
+        self.assertEqual(0, h2["hintsLeft"])
         blue2 = sum(1 for v in h2["keyboardStatus"].values() if v == "blue")
         self.assertEqual(2, blue2)
 
         h3 = self.service.use_hint(game["gameId"])
-        self.assertEqual(2, h3["hintsLeft"])
+        self.assertEqual(0, h3["hintsLeft"])
         blue3 = sum(1 for v in h3["keyboardStatus"].values() if v == "blue")
-        self.assertEqual(3, blue3)
+        self.assertEqual(2, blue3)
 
     def test_no_hints_remaining(self) -> None:
         game = self.service.create_game_with_secret("orbit")
-        for _ in range(5):
+        for _ in range(2):
             self.service.use_hint(game["gameId"])
 
         exhausted = self.service.get_game(game["gameId"])
@@ -236,7 +269,9 @@ class TestWordleService(unittest.TestCase):
         reset = self.service.reset_game(original_id)
         self.assertEqual(original_id, reset["gameId"])
         self.assertEqual(6, reset["attemptsRemaining"])
-        self.assertEqual(5, reset["hintsLeft"])
+        self.assertEqual(2, reset["hintsLeft"])
+        self.assertEqual("medium", reset["difficulty"])
+        self.assertEqual(5, reset["wordLength"])
         self.assertEqual([], reset["guesses"])
         self.assertEqual({}, reset["keyboardStatus"])
         self.assertFalse(reset["won"])
@@ -246,7 +281,7 @@ class TestWordleService(unittest.TestCase):
         d = self.service.dictionary
         self.assertGreaterEqual(len(d), 600)
         for w in d:
-            self.assertEqual(5, len(w))
+            self.assertIn(len(w), (5, 6))
             self.assertTrue(w.isalpha())
             self.assertTrue(w.islower())
 
@@ -307,13 +342,13 @@ class TestHttpServerHandler(unittest.TestCase):
 
         code, hinted = self._execute_request("POST", f"/api/games/{game_id}/hint")
         self.assertEqual(200, code)
-        self.assertEqual(4, hinted["hintsLeft"])
+        self.assertEqual(1, hinted["hintsLeft"])
 
         code, reset = self._execute_request("POST", f"/api/games/{game_id}/reset")
         self.assertEqual(200, code)
         self.assertEqual(game_id, reset["gameId"])
         self.assertEqual(6, reset["attemptsRemaining"])
-        self.assertEqual(5, reset["hintsLeft"])
+        self.assertEqual(2, reset["hintsLeft"])
 
         code, error = self._execute_request("GET", "/api/games/unknown-id")
         self.assertEqual(404, code)

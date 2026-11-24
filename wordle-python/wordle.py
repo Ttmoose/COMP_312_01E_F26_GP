@@ -23,7 +23,24 @@ class Wordle:
     WORD_LENGTH: int = 5
     MAX_HINTS: int = 5
 
-    def __init__(self, secret: str):
+    def __init__(self, secret: str, difficulty="medium"):
+        self.difficulty = difficulty
+
+        if difficulty == "easy":
+            self.MAX_ATTEMPTS = 8
+            self.WORD_LENGTH = 5
+            self.MAX_HINTS = 5
+
+        elif difficulty == "hard":
+            self.MAX_ATTEMPTS = 4
+            self.WORD_LENGTH = 6
+            self.MAX_HINTS = 0
+
+        else:
+            self.MAX_ATTEMPTS = 6
+            self.WORD_LENGTH = 5
+            self.MAX_HINTS = 2
+
         self.secret: str = secret.upper()
         self.attempts: List[str] = []
         self.results: List[List[LetterState]] = []
