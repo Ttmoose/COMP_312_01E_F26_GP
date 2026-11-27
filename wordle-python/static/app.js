@@ -1,6 +1,8 @@
 const rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
 let game = null;
 let currentInput = "";
+let selectedDifficulty = "medium";
+let selectedWordLength = 5;
 
 const board = document.getElementById("board");
 const keyboard = document.getElementById("keyboard");
@@ -8,9 +10,11 @@ const message = document.getElementById("message");
 const attempts = document.getElementById("attempts");
 const hintsCount = document.getElementById("hints-count");
 const hintButton = document.getElementById("hint-button");
+const gameSubtitle = document.getElementById("game-subtitle");
 
 function makeBoard() {
     board.innerHTML = "";
+    board.className = `board len-${game.wordLength}`;
     for (let r = 0; r < game.maxAttempts; r++) {
         const row = document.createElement("div");
         row.className = "board-row";
@@ -99,12 +103,25 @@ function renderKeyboard() {
     });
 }
 
+function updateControlStates() {
+    document.querySelectorAll(".difficulty button[data-difficulty]").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.difficulty === selectedDifficulty);
+    });
+    document.querySelectorAll(".word-length button[data-length]").forEach(btn => {
+        btn.classList.toggle("active", Number(btn.dataset.length) === selectedWordLength);
+    });
+}
+
 function renderGame() {
     renderBoard();
     renderKeyboard();
+    updateControlStates();
     attempts.textContent = game.attemptsRemaining;
     hintsCount.textContent = game.hintsLeft;
     document.getElementById("hint-cost").textContent = `${game.hintsLeft} left`;
+    if (gameSubtitle) {
+        gameSubtitle.textContent = `Find the hidden ${game.wordLength}-letter word in ${game.maxAttempts} tries.`;
+    }
     message.textContent = game.message;
     hintButton.disabled = game.gameOver || game.hintsLeft <= 0;
     document.getElementById("new-game-button").disabled = false;
@@ -120,11 +137,13 @@ async function api(path, options = {}) {
     return data;
 }
 
-async function startNewGame(difficulty = "medium") {
+async function startNewGame(difficulty = selectedDifficulty, wordLength = selectedWordLength) {
+    selectedDifficulty = difficulty;
+    selectedWordLength = wordLength;
     try {
         game = await api("/api/games", {
             method: "POST",
-            body: JSON.stringify({ difficulty: difficulty })
+            body: JSON.stringify({ difficulty: selectedDifficulty, wordLength: selectedWordLength })
         });
         currentInput = "";
         makeBoard();
@@ -165,19 +184,51 @@ async function useHint() {
 
 document.addEventListener("keydown", event => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
-    if (event.key === "Enter") submitGuess();
-    else if (event.key === "Backspace") removeLetter();
-    else if (/^[a-zA-Z]$/.test(event.key)) addLetter(event.key.toLowerCase());
+    if (event.key === "Enter") {
+        event.preventDefault();
+        submitGuess();
+    } else if (event.key === "Backspace") {
+        event.preventDefault();
+        removeLetter();
+    } else if (/^[a-zA-Z]$/.test(event.key)) {
+        addLetter(event.key.toLowerCase());
+    }
 });
 
-document.getElementById("new-game-button").addEventListener("click", () => startNewGame(game.difficulty));
+document.getElementById("new-game-button").addEventListener("click", e => {
+    e.currentTarget.blur();
+    startNewGame(selectedDifficulty, selectedWordLength);
+});
 
-document.getElementById("new-game-top").addEventListener("click", () => startNewGame(game.difficulty));
-hintButton.addEventListener("click", useHint);
-document.getElementById("easy").addEventListener("click", () => startNewGame("easy"));
+document.getElementById("new-game-top").addEventListener("click", e => {
+    e.currentTarget.blur();
+    startNewGame(selectedDifficulty, selectedWordLength);
+});
+hintButton.addEventListener("click", e => {
+    e.currentTarget.blur();
+    useHint();
+});
+document.getElementById("easy").addEventListener("click", e => {
+    e.currentTarget.blur();
+    startNewGame("easy", selectedWordLength);
+});
 
-document.getElementById("medium").addEventListener("click", () => startNewGame("medium"));
+document.getElementById("medium").addEventListener("click", e => {
+    e.currentTarget.blur();
+    startNewGame("medium", selectedWordLength);
+});
 
-document.getElementById("hard").addEventListener("click", () => startNewGame("hard"));
+document.getElementById("hard").addEventListener("click", e => {
+    e.currentTarget.blur();
+    startNewGame("hard", selectedWordLength);
+});
+
+document.querySelectorAll(".word-length button[data-length]").forEach(btn => {
+    btn.addEventListener("click", e => {
+        e.currentTarget.blur();
+        startNewGame(selectedDifficulty, Number(btn.dataset.length));
+    });
+});
+
 makeKeyboard();
 startNewGame();

@@ -105,38 +105,54 @@ public class GameService {
         this.wordList = new ArrayList<>(this.dictionary);
     }
 
+    private static final Set<Integer> SUPPORTED_WORD_LENGTHS = Set.of(5, 6, 7);
+
     private static Set<String> loadWordsFromCsv() {
-        // 1. Try classpath resource: words.csv
-        try (InputStream is = GameService.class.getClassLoader().getResourceAsStream("words.csv")) {
-            if (is != null) {
-                Set<String> words = parseWords(new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8)));
-                if (!words.isEmpty()) {
-                    return words;
+        Set<String> combined = new HashSet<>();
+        String[] classpathResources = {
+            "5-letter-word.csv",
+            "6-letter-word.csv",
+            "7-letter-word.csv",
+            "words.csv"
+        };
+        for (String resource : classpathResources) {
+            try (InputStream is = GameService.class.getClassLoader().getResourceAsStream(resource)) {
+                if (is != null) {
+                    combined.addAll(parseWords(new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))));
                 }
+            } catch (Exception ignored) {
             }
-        } catch (Exception ignored) {
+        }
+        if (!combined.isEmpty()) {
+            return combined;
         }
 
         // 2. Try file system relative paths
         String[] candidatePaths = {
+            "5-letter-word.csv",
+            "6-letter-word.csv",
+            "7-letter-word.csv",
             "words.csv",
             "reference/words.csv",
+            "src/main/resources/5-letter-word.csv",
+            "src/main/resources/6-letter-word.csv",
+            "src/main/resources/7-letter-word.csv",
             "src/main/resources/words.csv",
+            "../wordle-python/5-letter-word.csv",
+            "../wordle-python/6-letter-word.csv",
+            "../wordle-python/7-letter-word.csv",
             "../words.csv"
         };
         for (String path : candidatePaths) {
             File file = new File(path);
             if (file.exists() && file.isFile()) {
                 try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                    Set<String> words = parseWords(reader);
-                    if (!words.isEmpty()) {
-                        return words;
-                    }
+                    combined.addAll(parseWords(reader));
                 } catch (IOException ignored) {
                 }
             }
         }
-        return null;
+        return combined.isEmpty() ? null : combined;
     }
 
     private static Set<String> parseWords(BufferedReader reader) throws IOException {
@@ -146,7 +162,9 @@ public class GameService {
             String[] tokens = line.split(",");
             for (String token : tokens) {
                 String clean = token.replaceAll("[^a-zA-Z]", "").trim().toLowerCase();
-                if (clean.length() == 5 && !clean.equalsIgnoreCase("words")) {
+                if (SUPPORTED_WORD_LENGTHS.contains(clean.length())
+                        && !clean.equalsIgnoreCase("words")
+                        && !clean.equalsIgnoreCase("word")) {
                     words.add(clean);
                 }
             }
@@ -155,12 +173,29 @@ public class GameService {
     }
 
     public GameView newGame() {
+        return newGame(5);
+    }
+
+    public GameView newGame(int wordLength) {
+        if (!SUPPORTED_WORD_LENGTHS.contains(wordLength)) {
+            throw new IllegalArgumentException("Word length must be 5, 6, or 7.");
+        }
         evictOldSessionsIfNeeded();
         String id = UUID.randomUUID().toString();
-        String secret = wordList.get((int) (Math.random() * wordList.size()));
+        String secret = pickRandomWord(wordLength);
         GameSession game = new GameSession(id, secret);
         games.put(id, game);
         return toView(game);
+    }
+
+    private String pickRandomWord(int wordLength) {
+        List<String> matching = wordList.stream()
+                .filter(w -> w.length() == wordLength)
+                .toList();
+        if (matching.isEmpty()) {
+            throw new IllegalStateException("No words available for length " + wordLength);
+        }
+        return matching.get((int) (Math.random() * matching.size()));
     }
 
     /**
@@ -177,13 +212,13 @@ public class GameService {
     public GameView resetGame(String id) {
         GameSession game = findGame(id);
         synchronized (game) {
-            game.secretWord = wordList.get((int) (Math.random() * wordList.size()));
+            game.secretWord = pickRandomWord(game.wordLength);
             game.guesses.clear();
             game.keyboardStatus.clear();
             game.hintsLeft = 5;
             game.won = false;
             game.gameOver = false;
-            game.message = "Game reset. Guess the new five-letter word.";
+            game.message = "Game reset. Guess the new " + game.wordLength + "-letter word.";
             game.touch();
             return toView(game);
         }
@@ -214,8 +249,8 @@ public class GameService {
 
             String guess = rawGuess == null ? "" : rawGuess.trim().toLowerCase();
 
-            if (guess.length() != 5 || !guess.matches("[a-z]{5}")) {
-                game.message = "Your guess must be exactly five letters.";
+            if (guess.length() != game.wordLength || !guess.matches("[a-z]+")) {
+                game.message = "Your guess must be exactly " + game.wordLength + " letters.";
                 return toView(game);
             }
 
@@ -227,7 +262,7 @@ public class GameService {
             List<String> statuses = evaluateGuess(guess, game.secretWord);
             game.guesses.add(new GuessResult(guess, statuses));
 
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < game.wordLength; i++) {
                 updateKeyboardStatus(game, guess.charAt(i), statuses.get(i));
             }
 
@@ -259,7 +294,7 @@ public class GameService {
             }
 
             Character targetLetter = null;
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < game.wordLength; i++) {
                 char letter = game.secretWord.charAt(i);
                 boolean alreadySolved = false;
                 for (GuessResult result : game.guesses) {
@@ -301,12 +336,13 @@ public class GameService {
     }
 
     private List<String> evaluateGuess(String guess, String target) {
-        String[] statuses = new String[5];
+        int len = target.length();
+        String[] statuses = new String[len];
         Arrays.fill(statuses, "grey");
         char[] targetChars = target.toCharArray();
 
         // First pass: exact matches (green).
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < len; i++) {
             if (guess.charAt(i) == targetChars[i]) {
                 statuses[i] = "green";
                 targetChars[i] = '_';
@@ -314,12 +350,12 @@ public class GameService {
         }
 
         // Second pass: letters present in another position (orange).
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < len; i++) {
             if (statuses[i].equals("green")) {
                 continue;
             }
             char c = guess.charAt(i);
-            for (int j = 0; j < 5; j++) {
+            for (int j = 0; j < len; j++) {
                 if (targetChars[j] == c) {
                     statuses[i] = "orange";
                     targetChars[j] = '_';
@@ -353,6 +389,7 @@ public class GameService {
     private GameView toView(GameSession game) {
         return new GameView(
                 game.id,
+                game.wordLength,
                 List.copyOf(game.guesses),
                 Map.copyOf(game.keyboardStatus),
                 6 - game.guesses.size(),

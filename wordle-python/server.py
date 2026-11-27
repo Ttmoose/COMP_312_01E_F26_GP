@@ -85,9 +85,20 @@ class WordleHandler(SimpleHTTPRequestHandler):
         if path == "/api/games":
             body = self._read_json_body()
             difficulty = body.get("difficulty", "medium")
+            raw_word_length = body.get("wordLength")
+            word_length = None
+            if raw_word_length is not None:
+                try:
+                    word_length = int(raw_word_length)
+                except (TypeError, ValueError):
+                    self._send_json(400, {"message": "Word length must be 5, 6, or 7."})
+                    return
 
-            view = self.game_service.new_game(difficulty)
-            self._send_json(200, view)
+            try:
+                view = self.game_service.new_game(difficulty, word_length=word_length)
+                self._send_json(200, view)
+            except ValueError as e:
+                self._send_json(400, {"message": str(e)})
             return
 
         # API: POST /api/games/{id}/guesses
@@ -148,6 +159,7 @@ class WordleHandler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(content)))
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
             self.end_headers()
             self.wfile.write(content)
         except Exception as e:

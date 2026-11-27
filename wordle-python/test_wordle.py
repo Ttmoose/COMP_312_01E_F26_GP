@@ -280,10 +280,32 @@ class TestWordleService(unittest.TestCase):
     def test_dictionary_loaded(self) -> None:
         d = self.service.dictionary
         self.assertGreaterEqual(len(d), 600)
+        lengths_found = set()
         for w in d:
-            self.assertIn(len(w), (5, 6))
+            self.assertIn(len(w), (5, 6, 7))
             self.assertTrue(w.isalpha())
             self.assertTrue(w.islower())
+            lengths_found.add(len(w))
+        self.assertEqual({5, 6, 7}, lengths_found)
+
+    def test_six_and_seven_letter_word_lengths(self) -> None:
+        game_6 = self.service.new_game("easy", word_length=6)
+        self.assertEqual(6, game_6["wordLength"])
+        self.assertEqual(8, game_6["attemptsRemaining"])
+        guess_6 = self.service.submit_guess(game_6["gameId"], "orange")
+        self.assertEqual(1, len(guess_6["guesses"]))
+
+        game_7 = self.service.new_game("medium", word_length=7)
+        self.assertEqual(7, game_7["wordLength"])
+        self.assertEqual(6, game_7["attemptsRemaining"])
+        guess_7 = self.service.submit_guess(game_7["gameId"], "abandon")
+        self.assertEqual(1, len(guess_7["guesses"]))
+
+        reset_7 = self.service.reset_game(game_7["gameId"])
+        self.assertEqual(7, reset_7["wordLength"])
+
+        with self.assertRaises(ValueError):
+            self.service.new_game("medium", word_length=8)
 
 
 class FakeSocket:
@@ -354,6 +376,19 @@ class TestHttpServerHandler(unittest.TestCase):
         self.assertEqual(404, code)
         self.assertIn("message", error)
 
+    def test_api_word_length_selection(self) -> None:
+        code, game6 = self._execute_request("POST", "/api/games", {"difficulty": "medium", "wordLength": 6})
+        self.assertEqual(200, code)
+        self.assertEqual(6, game6["wordLength"])
+
+        code, game7 = self._execute_request("POST", "/api/games", {"difficulty": "easy", "wordLength": 7})
+        self.assertEqual(200, code)
+        self.assertEqual(7, game7["wordLength"])
+
+        code, bad = self._execute_request("POST", "/api/games", {"difficulty": "medium", "wordLength": 9})
+        self.assertEqual(400, code)
+        self.assertIn("message", bad)
+
     def test_static_files_served(self) -> None:
         raw_http = b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"
         sock = FakeSocket(raw_http)
@@ -361,6 +396,8 @@ class TestHttpServerHandler(unittest.TestCase):
         output = sock.wfile.getvalue().decode("utf-8")
         self.assertIn("200 OK", output)
         self.assertIn("<!DOCTYPE html>", output)
+        self.assertIn('data-length="6"', output)
+        self.assertIn('data-length="7"', output)
 
         raw_http_css = b"GET /style.css HTTP/1.1\r\nHost: localhost\r\n\r\n"
         sock_css = FakeSocket(raw_http_css)

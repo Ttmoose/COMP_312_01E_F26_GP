@@ -1,6 +1,7 @@
 const rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
 let game = null;
 let currentInput = "";
+let selectedWordLength = 5;
 
 const board = document.getElementById("board");
 const keyboard = document.getElementById("keyboard");
@@ -8,13 +9,16 @@ const message = document.getElementById("message");
 const attempts = document.getElementById("attempts");
 const hintsCount = document.getElementById("hints-count");
 const hintButton = document.getElementById("hint-button");
+const gameSubtitle = document.getElementById("game-subtitle");
 
-function makeBoard() {
+function makeBoard(wordLength = selectedWordLength) {
     board.innerHTML = "";
+    board.className = `board len-${wordLength}`;
+    board.style.setProperty("--word-length", wordLength);
     for (let r = 0; r < 6; r++) {
         const row = document.createElement("div");
         row.className = "board-row";
-        for (let c = 0; c < 5; c++) {
+        for (let c = 0; c < wordLength; c++) {
             const tile = document.createElement("div");
             tile.className = "tile";
             tile.id = `tile-${r}-${c}`;
@@ -51,7 +55,8 @@ function makeKey(label, extraClass, action) {
 }
 
 function addLetter(letter) {
-    if (!game || game.gameOver || currentInput.length >= 5) return;
+    const wordLength = game?.wordLength || selectedWordLength;
+    if (!game || game.gameOver || currentInput.length >= wordLength) return;
     currentInput += letter;
     renderBoard();
 }
@@ -62,9 +67,11 @@ function removeLetter() {
 }
 
 function renderBoard() {
+    const wordLength = game?.wordLength || selectedWordLength;
     for (let r = 0; r < 6; r++) {
-        for (let c = 0; c < 5; c++) {
+        for (let c = 0; c < wordLength; c++) {
             const tile = document.getElementById(`tile-${r}-${c}`);
+            if (!tile) continue;
             tile.className = "tile";
             tile.textContent = "";
         }
@@ -72,8 +79,9 @@ function renderBoard() {
     if (!game) return;
 
     game.guesses.forEach((guess, r) => {
-        for (let c = 0; c < 5; c++) {
+        for (let c = 0; c < wordLength; c++) {
             const tile = document.getElementById(`tile-${r}-${c}`);
+            if (!tile) continue;
             tile.textContent = guess.guess[c].toUpperCase();
             tile.classList.add(guess.statuses[c]);
         }
@@ -83,6 +91,7 @@ function renderBoard() {
     if (!game.gameOver && activeRow < 6) {
         [...currentInput].forEach((letter, c) => {
             const tile = document.getElementById(`tile-${activeRow}-${c}`);
+            if (!tile) return;
             tile.textContent = letter.toUpperCase();
             tile.classList.add("filled");
         });
@@ -97,12 +106,22 @@ function renderKeyboard() {
     });
 }
 
+function updateWordLengthButtons() {
+    document.querySelectorAll(".word-length button[data-length]").forEach(btn => {
+        btn.classList.toggle("active", Number(btn.dataset.length) === selectedWordLength);
+    });
+}
+
 function renderGame() {
     renderBoard();
     renderKeyboard();
+    updateWordLengthButtons();
     attempts.textContent = game.attemptsRemaining;
     hintsCount.textContent = game.hintsLeft;
     document.getElementById("hint-cost").textContent = `${game.hintsLeft} left`;
+    if (gameSubtitle) {
+        gameSubtitle.textContent = `Find the hidden ${game.wordLength}-letter word in 6 tries.`;
+    }
     message.textContent = game.message;
     hintButton.disabled = game.gameOver || game.hintsLeft <= 0;
     document.getElementById("new-game-button").disabled = false;
@@ -118,10 +137,15 @@ async function api(path, options = {}) {
     return data;
 }
 
-async function startNewGame() {
+async function startNewGame(wordLength = selectedWordLength) {
+    selectedWordLength = wordLength;
     try {
-        game = await api("/api/games", { method: "POST" });
+        game = await api("/api/games", {
+            method: "POST",
+            body: JSON.stringify({ wordLength: selectedWordLength })
+        });
         currentInput = "";
+        makeBoard(game.wordLength);
         renderGame();
     } catch (error) {
         message.textContent = error.message;
@@ -130,8 +154,8 @@ async function startNewGame() {
 
 async function submitGuess() {
     if (!game || game.gameOver) return;
-    if (currentInput.length !== 5) {
-        message.textContent = "Enter a five-letter word first.";
+    if (currentInput.length !== game.wordLength) {
+        message.textContent = `Enter a ${game.wordLength}-letter word first.`;
         return;
     }
     try {
@@ -164,9 +188,13 @@ document.addEventListener("keydown", event => {
     else if (/^[a-zA-Z]$/.test(event.key)) addLetter(event.key.toLowerCase());
 });
 
-document.getElementById("new-game-button").addEventListener("click", startNewGame);
-document.getElementById("new-game-top").addEventListener("click", startNewGame);
+document.getElementById("new-game-button").addEventListener("click", () => startNewGame(selectedWordLength));
+document.getElementById("new-game-top").addEventListener("click", () => startNewGame(selectedWordLength));
 hintButton.addEventListener("click", useHint);
+
+document.querySelectorAll(".word-length button[data-length]").forEach(btn => {
+    btn.addEventListener("click", () => startNewGame(Number(btn.dataset.length)));
+});
 
 makeBoard();
 makeKeyboard();

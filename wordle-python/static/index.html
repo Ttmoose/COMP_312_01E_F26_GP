@@ -23,14 +23,23 @@
         <section class="intro">
             <p class="eyebrow">THE DAILY-STYLE WORD CHALLENGE</p>
             <h1>Guess the <span>word.</span></h1>
-            <p class="subtitle">Find the hidden five-letter word in six tries.</p>
+            <p class="subtitle" id="game-subtitle">Find the hidden 5-letter word in 6 tries.</p>
         </section>
-        <div class="difficulty">
-            <p>Choose your difficulty:</p>
+        <div class="controls-row">
+            <div class="difficulty" role="group" aria-label="Difficulty">
+                <p>Choose your difficulty:</p>
 
-            <button id="easy">Easy</button>
-            <button id="medium">Medium</button>
-            <button id="hard">Hard</button>
+                <button id="easy" data-difficulty="easy">Easy</button>
+                <button id="medium" data-difficulty="medium" class="active">Medium</button>
+                <button id="hard" data-difficulty="hard">Hard</button>
+            </div>
+            <div class="word-length" role="group" aria-label="Word length">
+                <p>Word length:</p>
+
+                <button id="length-5" data-length="5" class="active">5 Letters</button>
+                <button id="length-6" data-length="6">6 Letters</button>
+                <button id="length-7" data-length="7">7 Letters</button>
+            </div>
         </div>
         <section class="game-panel" aria-label="Word game">
             <div class="game-meta">

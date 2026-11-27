@@ -120,4 +120,25 @@ class GameControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").isNotEmpty());
     }
+
+    @Test
+    @DisplayName("POST /api/games supports 6-letter and 7-letter wordLength and rejects invalid lengths")
+    void testCreateGameWithWordLength() throws Exception {
+        mockMvc.perform(post("/api/games")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"wordLength\":6}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.wordLength").value(6));
+
+        mockMvc.perform(post("/api/games")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"wordLength\":7}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.wordLength").value(7));
+
+        mockMvc.perform(post("/api/games")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"wordLength\":8}"))
+                .andExpect(status().isBadRequest());
+    }
 }

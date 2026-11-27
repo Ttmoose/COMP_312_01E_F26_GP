@@ -4,6 +4,7 @@ import com.wordle.model.GameView;
 import com.wordle.service.GameService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/games")
@@ -15,7 +16,14 @@ public class GameController {
     }
 
     @PostMapping
-    public GameView newGame() {
+    public GameView newGame(@RequestBody(required = false) NewGameRequest request) {
+        if (request != null && request.wordLength() != null) {
+            int len = request.wordLength();
+            if (len != 5 && len != 6 && len != 7) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Word length must be 5, 6, or 7.");
+            }
+            return gameService.newGame(len);
+        }
         return gameService.newGame();
     }
 
@@ -37,6 +45,9 @@ public class GameController {
     @PostMapping("/{id}/reset")
     public GameView reset(@PathVariable String id) {
         return gameService.resetGame(id);
+    }
+
+    public record NewGameRequest(Integer wordLength) {
     }
 
     public record GuessRequest(String guess) {

@@ -5,6 +5,7 @@ import java.util.Map;
 
 public record GameView(
         String gameId,
+        int wordLength,
         List<GuessResult> guesses,
         Map<String, String> keyboardStatus,
         int attemptsRemaining,

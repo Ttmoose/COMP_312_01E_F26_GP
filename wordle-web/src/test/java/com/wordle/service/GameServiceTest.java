@@ -247,15 +247,37 @@ class GameServiceTest {
     }
 
     @Test
-    @DisplayName("Dictionary loads 5-letter words from words.csv")
+    @DisplayName("Dictionary loads 5-, 6-, and 7-letter words from CSVs")
     void testDictionaryLoadedFromCsv() {
         Set<String> dictionary = gameService.getDictionary();
         assertNotNull(dictionary);
         assertTrue(dictionary.size() >= 600, "Dictionary should contain at least 600 words");
 
+        Set<Integer> lengths = new java.util.HashSet<>();
         for (String word : dictionary) {
-            assertEquals(5, word.length(), "Each dictionary word must be exactly 5 letters");
-            assertTrue(word.matches("[a-z]{5}"), "Each dictionary word must be lowercase alpha");
+            assertTrue(Set.of(5, 6, 7).contains(word.length()), "Each dictionary word must be 5, 6, or 7 letters");
+            assertTrue(word.matches("[a-z]{5,7}"), "Each dictionary word must be lowercase alpha");
+            lengths.add(word.length());
         }
+        assertEquals(Set.of(5, 6, 7), lengths, "Dictionary should contain 5-, 6-, and 7-letter words");
+    }
+
+    @Test
+    @DisplayName("6-letter and 7-letter games initialize, accept guesses, and reset with matching length")
+    void testSixAndSevenLetterGames() {
+        GameView game6 = gameService.newGame(6);
+        assertEquals(6, game6.wordLength());
+        GameView guess6 = gameService.submitGuess(game6.gameId(), "orange");
+        assertEquals(1, guess6.guesses().size());
+
+        GameView game7 = gameService.newGame(7);
+        assertEquals(7, game7.wordLength());
+        GameView guess7 = gameService.submitGuess(game7.gameId(), "abandon");
+        assertEquals(1, guess7.guesses().size());
+
+        GameView reset7 = gameService.resetGame(game7.gameId());
+        assertEquals(7, reset7.wordLength());
+
+        assertThrows(IllegalArgumentException.class, () -> gameService.newGame(8));
     }
 }

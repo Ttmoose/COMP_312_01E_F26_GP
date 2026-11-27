@@ -82,32 +82,62 @@ FALLBACK_DICTIONARY: Set[str] = {
 }
 
 
+SUPPORTED_WORD_LENGTHS = (5, 6, 7)
+
+
+def _read_words_file(path: str, allowed_lengths: tuple[int, ...] = SUPPORTED_WORD_LENGTHS) -> Set[str]:
+    words: Set[str] = set()
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            for token in row:
+                cleaned = "".join(ch for ch in token if ch.isalpha()).lower().strip()
+                if len(cleaned) in allowed_lengths and cleaned not in ("words", "word"):
+                    words.add(cleaned)
+    return words
+
+
 def load_words_from_csv(file_path: Optional[str] = None) -> Set[str]:
-    """Loads 5-letter words from words.csv or fallback locations."""
-    candidate_paths: List[str] = []
+    """Loads 5-, 6-, and 7-letter words from CSV dictionaries or fallback locations."""
     if file_path:
-        candidate_paths.append(file_path)
+        if os.path.isfile(file_path):
+            try:
+                words = _read_words_file(file_path)
+                if len(words) >= 100:
+                    return words
+            except Exception:
+                pass
+        return set(FALLBACK_DICTIONARY)
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    candidate_paths.extend([
+    length_files = [
+        os.path.join(base_dir, "5-letter-word.csv"),
+        os.path.join(base_dir, "6-letter-word.csv"),
+        os.path.join(base_dir, "7-letter-word.csv"),
         os.path.join(base_dir, "words.csv"),
+    ]
+
+    combined_words: Set[str] = set()
+    for path in length_files:
+        if os.path.isfile(path):
+            try:
+                combined_words.update(_read_words_file(path))
+            except Exception:
+                continue
+
+    if len(combined_words) >= 100:
+        return combined_words
+
+    fallback_paths = [
         os.path.join(base_dir, "..", "wordle-web", "words.csv"),
         os.path.join(base_dir, "..", "words.csv"),
         "words.csv",
         "wordle-python/words.csv",
-    ])
-
-    for path in candidate_paths:
+    ]
+    for path in fallback_paths:
         if os.path.isfile(path):
             try:
-                words: Set[str] = set()
-                with open(path, "r", encoding="utf-8", errors="ignore") as f:
-                    reader = csv.reader(f)
-                    for row in reader:
-                        for token in row:
-                            cleaned = "".join(ch for ch in token if ch.isalpha()).lower().strip()
-                            if len(cleaned) in (5, 6) and cleaned not in ("words", "word"):
-                                words.add(cleaned)
+                words = _read_words_file(path)
                 if len(words) >= 100:
                     return words
             except Exception:
@@ -178,20 +208,19 @@ class GameService:
         game.touch()
         return game
 
-    def new_game(self, difficulty="medium") -> Dict[str, Any]:
+    def new_game(self, difficulty: str = "medium", word_length: Optional[int] = None) -> Dict[str, Any]:
         self._evict_old_sessions_if_needed()
         game_id = str(uuid.uuid4())
 
-        if difficulty == "hard":
-            word_length = 6
-        else:
-            word_length = 5
+        if word_length is None:
+            word_length = 6 if difficulty == "hard" else 5
 
-        available_words = []
+        if word_length not in SUPPORTED_WORD_LENGTHS:
+            raise ValueError(f"Unsupported word length: {word_length}. Choose 5, 6, or 7.")
 
-        for word in self.word_list:
-            if len(word) == word_length:
-                available_words.append(word)
+        available_words = [word for word in self.word_list if len(word) == word_length]
+        if not available_words:
+            raise ValueError(f"No {word_length}-letter words available in dictionary.")
 
         secret = random.choice(available_words)
         session = GameSession(game_id, secret, difficulty)

@@ -41,6 +41,8 @@ h1 span { color: #80c69f; }
 .meta-label { color: var(--muted); font-size: 9px; letter-spacing: .13em; font-weight: 800; }
 .game-meta strong { font-size: 18px; }
 .board { display: grid; grid-auto-rows: 1fr; gap: 7px; width: min(100%, 310px); margin: 0 auto; }
+.board.len-6 { width: min(100%, 365px); }
+.board.len-7 { width: min(100%, 420px); }
 .board-row { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 7px; }
 .tile { aspect-ratio: 1; display: grid; place-items: center; border: 2px solid #394355; border-radius: 8px; font-size: clamp(20px, 5vw, 27px); font-weight: 850; text-transform: uppercase; background: #202735; transition: background .15s, border-color .15s; }
 .tile.filled { border-color: #66748b; }
@@ -79,17 +81,54 @@ footer { text-align: center; color: #687386; font-size: 10px; padding-top: 23px;
     .legend { gap: 10px 5px; }
     .legend-item small { font-size: 9px; } 
 }
-.difficulty {
-    text-align: center;
+.controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 16px 28px;
     margin: 15px 0;
 }
 
-.difficulty button {
-    padding: 10px 20px;
-    margin: 5px;
-    border: none;
+.difficulty, .word-length {
+    text-align: center;
+}
+
+.difficulty p, .word-length p {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.difficulty button, .word-length button {
+    padding: 9px 16px;
+    margin: 3px;
+    border: 2px solid transparent;
     border-radius: 8px;
     cursor: pointer;
+    font-weight: 700;
+    font-size: 13px;
+    transition: transform .1s, border-color .15s, background-color .15s;
+}
+
+.difficulty button {
+    color: #10131b;
+}
+
+.word-length button {
+    background-color: var(--panel-2);
+    color: var(--text);
+    border-color: var(--line);
+}
+
+.word-length button.active {
+    background-color: #80c69f;
+    color: #07170f;
+    border-color: #80c69f;
+}
+
+.difficulty button.active {
+    border-color: #ffffff;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
 }
 
 #easy {
