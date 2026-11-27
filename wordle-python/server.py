@@ -83,7 +83,10 @@ class WordleHandler(SimpleHTTPRequestHandler):
 
         # API: POST /api/games
         if path == "/api/games":
-            view = self.game_service.new_game()
+            body = self._read_json_body()
+            difficulty = body.get("difficulty", "medium")
+
+            view = self.game_service.new_game(difficulty)
             self._send_json(200, view)
             return
 

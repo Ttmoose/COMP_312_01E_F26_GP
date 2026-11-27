@@ -11,10 +11,10 @@ const hintButton = document.getElementById("hint-button");
 
 function makeBoard() {
     board.innerHTML = "";
-    for (let r = 0; r < 6; r++) {
+    for (let r = 0; r < game.maxAttempts; r++) {
         const row = document.createElement("div");
         row.className = "board-row";
-        for (let c = 0; c < 5; c++) {
+        for (let c = 0; c < game.wordLength; c++) {
             const tile = document.createElement("div");
             tile.className = "tile";
             tile.id = `tile-${r}-${c}`;
@@ -51,7 +51,7 @@ function makeKey(label, extraClass, action) {
 }
 
 function addLetter(letter) {
-    if (!game || game.gameOver || currentInput.length >= 5) return;
+    if (!game || game.gameOver || currentInput.length >= game.wordLength) return;
     currentInput += letter;
     renderBoard();
 }
@@ -62,17 +62,19 @@ function removeLetter() {
 }
 
 function renderBoard() {
-    for (let r = 0; r < 6; r++) {
-        for (let c = 0; c < 5; c++) {
+    if (!game) return;
+
+    for (let r = 0; r < game.maxAttempts; r++) {
+    for (let c = 0; c < game.wordLength; c++) {
             const tile = document.getElementById(`tile-${r}-${c}`);
             tile.className = "tile";
             tile.textContent = "";
         }
     }
-    if (!game) return;
+    
 
     game.guesses.forEach((guess, r) => {
-        for (let c = 0; c < 5; c++) {
+        for (let c = 0; c < game.wordLength; c++) {
             const tile = document.getElementById(`tile-${r}-${c}`);
             tile.textContent = guess.guess[c].toUpperCase();
             tile.classList.add(guess.statuses[c]);
@@ -80,7 +82,7 @@ function renderBoard() {
     });
 
     const activeRow = game.guesses.length;
-    if (!game.gameOver && activeRow < 6) {
+    if (!game.gameOver && activeRow < game.maxAttempts) {
         [...currentInput].forEach((letter, c) => {
             const tile = document.getElementById(`tile-${activeRow}-${c}`);
             tile.textContent = letter.toUpperCase();
@@ -118,10 +120,14 @@ async function api(path, options = {}) {
     return data;
 }
 
-async function startNewGame() {
+async function startNewGame(difficulty = "medium") {
     try {
-        game = await api("/api/games", { method: "POST" });
+        game = await api("/api/games", {
+            method: "POST",
+            body: JSON.stringify({ difficulty: difficulty })
+        });
         currentInput = "";
+        makeBoard();
         renderGame();
     } catch (error) {
         message.textContent = error.message;
@@ -130,8 +136,8 @@ async function startNewGame() {
 
 async function submitGuess() {
     if (!game || game.gameOver) return;
-    if (currentInput.length !== 5) {
-        message.textContent = "Enter a five-letter word first.";
+        if (currentInput.length !== game.wordLength) {
+        message.textContent = "Enter a " + game.wordLength + "-letter word first.";
         return;
     }
     try {
@@ -164,10 +170,14 @@ document.addEventListener("keydown", event => {
     else if (/^[a-zA-Z]$/.test(event.key)) addLetter(event.key.toLowerCase());
 });
 
-document.getElementById("new-game-button").addEventListener("click", startNewGame);
-document.getElementById("new-game-top").addEventListener("click", startNewGame);
-hintButton.addEventListener("click", useHint);
+document.getElementById("new-game-button").addEventListener("click", () => startNewGame(game.difficulty));
 
-makeBoard();
+document.getElementById("new-game-top").addEventListener("click", () => startNewGame(game.difficulty));
+hintButton.addEventListener("click", useHint);
+document.getElementById("easy").addEventListener("click", () => startNewGame("easy"));
+
+document.getElementById("medium").addEventListener("click", () => startNewGame("medium"));
+
+document.getElementById("hard").addEventListener("click", () => startNewGame("hard"));
 makeKeyboard();
 startNewGame();

@@ -106,7 +106,7 @@ def load_words_from_csv(file_path: Optional[str] = None) -> Set[str]:
                     for row in reader:
                         for token in row:
                             cleaned = "".join(ch for ch in token if ch.isalpha()).lower().strip()
-                            if len(cleaned) == 5 and cleaned not in ("words", "word"):
+                            if len(cleaned) in (5, 6) and cleaned not in ("words", "word"):
                                 words.add(cleaned)
                 if len(words) >= 100:
                     return words
@@ -119,10 +119,10 @@ def load_words_from_csv(file_path: Optional[str] = None) -> Set[str]:
 class GameSession:
     """Wraps a Wordle game instance with thread-safety and timestamping for web sessions."""
 
-    def __init__(self, game_id: str, secret_word: str):
+    def __init__(self, game_id: str, secret_word: str, difficulty="medium"):
         self.game_id: str = game_id
-        self.wordle: Wordle = Wordle(secret_word)
-        self.message: str = "Start guessing! You have 6 attempts and 5 hints."
+        self.wordle: Wordle = Wordle(secret_word, difficulty)
+        self.message: str = f"Start guessing! You have {self.wordle.MAX_ATTEMPTS} attempts and {self.wordle.MAX_HINTS} hints."
         self.last_accessed: float = time.time()
         self._lock = threading.RLock()
 
@@ -140,6 +140,9 @@ class GameSession:
             ]
             return {
                 "gameId": self.game_id,
+                "difficulty": self.wordle.difficulty,
+                "wordLength": self.wordle.WORD_LENGTH,
+                "maxAttempts": self.wordle.MAX_ATTEMPTS,
                 "guesses": formatted_guesses,
                 "keyboardStatus": dict(self.wordle.keyboard_status),
                 "attemptsRemaining": self.wordle.remaining_attempts,
@@ -175,11 +178,23 @@ class GameService:
         game.touch()
         return game
 
-    def new_game(self) -> Dict[str, Any]:
+    def new_game(self, difficulty="medium") -> Dict[str, Any]:
         self._evict_old_sessions_if_needed()
         game_id = str(uuid.uuid4())
-        secret = random.choice(self.word_list)
-        session = GameSession(game_id, secret)
+
+        if difficulty == "hard":
+            word_length = 6
+        else:
+            word_length = 5
+
+        available_words = []
+
+        for word in self.word_list:
+            if len(word) == word_length:
+                available_words.append(word)
+
+        secret = random.choice(available_words)
+        session = GameSession(game_id, secret, difficulty)
         with self._global_lock:
             self.games[game_id] = session
         return session.to_dict()
@@ -198,11 +213,22 @@ class GameService:
 
     def reset_game(self, game_id: str) -> Dict[str, Any]:
         session = self._find_game(game_id)
+
         with session._lock:
-            new_secret = random.choice(self.word_list)
-            session.wordle = Wordle(new_secret)
-            session.message = "Game reset. Guess the new five-letter word."
+            difficulty = session.wordle.difficulty
+            word_length = session.wordle.WORD_LENGTH
+
+            available_words = []
+
+            for word in self.word_list:
+                if len(word) == word_length:
+                    available_words.append(word)
+
+            new_secret = random.choice(available_words)
+            session.wordle = Wordle(new_secret, difficulty)
+            session.message = f"Game reset. Guess the new {word_length}-letter word."
             session.touch()
+
         return session.to_dict()
 
     def submit_guess(self, game_id: str, raw_guess: Optional[str]) -> Dict[str, Any]:
@@ -215,8 +241,8 @@ class GameService:
 
             guess = (raw_guess or "").strip().lower()
 
-            if len(guess) != Wordle.WORD_LENGTH or not guess.isalpha():
-                session.message = "Your guess must be exactly five letters."
+            if len(guess) != session.wordle.WORD_LENGTH or not guess.isalpha():
+                session.message = f"Your guess must be exactly {session.wordle.WORD_LENGTH} letters."
                 return session.to_dict()
 
             if guess not in self.dictionary:
